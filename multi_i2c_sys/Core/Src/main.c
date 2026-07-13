@@ -43,7 +43,24 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+static const uint8_t TARGET_ADDR = 0x48;
 
+static const uint8_t CONV_REG_ADDR = 0x00;
+
+static const uint8_t CH_I2C_TX_BUFF[][3] = {
+		{0x01, 0x42, 0x80},
+		{0x01, 0x52, 0x80},
+		{0x01, 0x62, 0x80},
+		{0x01, 0x72, 0x80}
+};
+
+//static const uint8_t ch0_i2c_tx_buff[] = {0x01, 0x42, 0x80};
+//static const uint8_t ch1_i2c_tx_buff[] = {0x01, 0x52, 0x80};
+//static const uint8_t ch2_i2c_tx_buff[] = {0x01, 0x62, 0x80};
+//static const uint8_t ch3_i2c_tx_buff[] = {0x01, 0x72, 0x80};
+
+static const uint32_t TIMEOUT_I2C  = 50U;
+static const uint32_t TIMEOUT_UART = 50U;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -94,19 +111,17 @@ int main(void)
 
   char uart_tx[32];
 
-  HAL_UART_Transmit(&huart1, (uint8_t*)"UART1_test\r\n", strlen("UART1_test\r\n"), 100);
+  HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nUART1_test\r\n", strlen("\r\nUART1_test\r\n"), 100);
 
   for (uint8_t addr = 1; addr < 128; addr++)
   {
       if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 2, 10) == HAL_OK)
       {
-          sprintf(uart_tx, "addr: 0x%02X\r\n", addr);
+          sprintf(uart_tx, "\r\naddr: 0x%02X\r\n", addr);
           HAL_UART_Transmit(&huart1, (uint8_t*)uart_tx, strlen(uart_tx), 100);
       }
   }
 
-//  HAL_I2C_Master_Transmit(&hi2c1, 0x49, 5, 1, 100);
-  //  HAL_I2C_Mem_Write(hi2c, DevAddress, MemAddress, MemAddSize, pData, Size, Timeout)
 
 
   HAL_Delay(3000);
@@ -116,50 +131,41 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
+
+HAL_StatusTypeDef i2c_adc_module(uint8_t adc_channel ,uint8_t TARGET_ADDR, const uint8_t i2c_tx_buff[] , uint8_t tx_arr_size , uint8_t i2c_rx_reg ,  uint8_t * i2c_rx_buff , uint8_t rx_arr_size)
   {
 	  char uart_tx_i2c[80];
 
-	  uint8_t target_addr = 0x48;
-	  uint8_t conf_reg_addr = 0x01;
+	  HAL_StatusTypeDef status;
 
-//	  uint16_t conf_reg_data = 0x280; // 0b00000010  10000000;
-//	  uint8_t conf_reg_data_arr[] = {0x02 , 0x80}; // 0b00000010  10000000;
-//	  uint8_t conf_reg_data_MSB = 0x02;
-//	  uint8_t conf_reg_data_LSB = 0x80;
+	  status = HAL_I2C_Master_Transmit(&hi2c1, TARGET_ADDR << 1 , i2c_tx_buff, tx_arr_size , TIMEOUT_I2C);
 
-	  // FSR (PGA) = 001 , MUX (Input multiplexer configuration) = 100
-	  uint16_t conf_reg_data = 0x4280; // 0b01000010  10000000;
-	  uint8_t conf_reg_data_arr[] = {0x42 , 0x80}; // 0b01000010  10000000;
-	  uint8_t conf_reg_data_MSB = 0x42;
-	  uint8_t conf_reg_data_LSB = 0x80;
+	  if(status != HAL_OK)
+	  {
+		  return status;
+	  }
 
-
-
-//	  HAL_I2C_Master_Transmit(&hi2c1, target_addr << 1 , &conf_reg_addr, 1, 100);
-//	  HAL_I2C_Master_Transmit(&hi2c1, target_addr << 1 , &conf_reg_data_arr, 2, 100);
-
-	  // To write to the sensor
-
-	  uint8_t i2c_tx_buff[] = {conf_reg_addr , conf_reg_data_MSB , conf_reg_data_LSB};
-	  HAL_I2C_Master_Transmit(&hi2c1, target_addr << 1 , i2c_tx_buff, 3, 100);
-
-	  sprintf(uart_tx_i2c , "\n\rWrite: conf_reg: 0x%x , conf_data: 0x%x , 0x%x" ,i2c_tx_buff[0] , i2c_tx_buff[1] ,i2c_tx_buff[2] );
-	  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
-
-//	  HAL_I2C_Mem_Write(&hi2c1, target_addr << 1 , 0x01, 1, &conf_reg_data_arr, 2, 100);
-
-	  HAL_Delay(1000);
+	  HAL_Delay(10);
 
 	  // To read from the sensor
-	  uint8_t conv_reg_addr = 0x00;
-	  HAL_I2C_Master_Transmit(&hi2c1, target_addr << 1, &conv_reg_addr, 1, 100);
-	  uint8_t i2c_rx_buf[2];
-	  HAL_I2C_Master_Receive(&hi2c1, target_addr << 1 , i2c_rx_buf, 2, 100);
+	  status = HAL_I2C_Master_Transmit(&hi2c1, TARGET_ADDR << 1, &i2c_rx_reg , 1, TIMEOUT_I2C);
 
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+	  if(status != HAL_OK)
+	  	  {
+	  		  return status;
+	  	  }
 
-	  int16_t adc_raw = (int16_t )((i2c_rx_buf[0] << 8) | i2c_rx_buf[1]);
+	  HAL_Delay(10);
+
+	  status = HAL_I2C_Master_Receive(&hi2c1, TARGET_ADDR << 1 , i2c_rx_buff , rx_arr_size, TIMEOUT_I2C);
+
+	  if(status != HAL_OK)
+	  	  {
+	  		  return status;
+	  	  }
+
+
+	  int16_t adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
 
 	  // to cancel the noise effect on the print:
 	  if(adc_raw < 0)
@@ -167,12 +173,31 @@ int main(void)
 		  adc_raw = 0;
 	  }
 	  float voltage = adc_raw * 4.096 / 32768.0f;
-//	  sprintf(uart_tx_i2c , "\n\rADC0: 0.x%02x%02x , voltage: %f v" , i2c_rx_buf[0] , i2c_rx_buf[1], voltage);
-	  sprintf(uart_tx_i2c , "\n\rADC0: 0.x%02x , voltage: %f v" , adc_raw, voltage);
+	  sprintf(uart_tx_i2c , "\n\rADC%d: 0x%04x , voltage: %.4f v" ,adc_channel, adc_raw, voltage);
 	  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
 
-//	  HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nUART1_test", 12 , 100);
-	  HAL_Delay(100);
+	  return HAL_OK;
+
+  }
+
+  while (1)
+  {
+	  uint8_t i2c_rx_buff[2];
+	  char uart_tx_i2c[80];
+
+	  HAL_StatusTypeDef status;
+
+	  for(uint8_t ch=0; ch<4; ch++)
+	  {
+		  status = i2c_adc_module(ch ,TARGET_ADDR, CH_I2C_TX_BUFF[ch] , 3 , CONV_REG_ADDR ,  i2c_rx_buff , 2);
+		  snprintf(uart_tx_i2c ,  sizeof(uart_tx_i2c) , " , Hal status: %d" , status);
+		  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 50);
+		  HAL_Delay(100);
+	  }
+
+
+
+
 
     /* USER CODE END WHILE */
 
