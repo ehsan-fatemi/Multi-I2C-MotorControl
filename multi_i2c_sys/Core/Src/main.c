@@ -25,6 +25,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,6 +36,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define ADC_CONFIG_SIZE 3U
+#define ADC_RX_SIZE     2U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -43,21 +47,20 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-static const uint8_t TARGET_ADDR = 0x48;
 
 static const uint8_t CONV_REG_ADDR = 0x00;
 
+static const uint8_t MULPLXR_ADDR = 0x70;
+static const uint8_t ADC_ADDR     = 0x48;
+
 static const uint8_t CH_I2C_TX_BUFF[][3] = {
-		{0x01, 0x42, 0x80},
-		{0x01, 0x52, 0x80},
-		{0x01, 0x62, 0x80},
-		{0x01, 0x72, 0x80}
+		{0x01, 0xC2, 0x80},
+		{0x01, 0xD2, 0x80},
+		{0x01, 0xE2, 0x80},
+		{0x01, 0xF2, 0x80}
 };
 
-//static const uint8_t ch0_i2c_tx_buff[] = {0x01, 0x42, 0x80};
-//static const uint8_t ch1_i2c_tx_buff[] = {0x01, 0x52, 0x80};
-//static const uint8_t ch2_i2c_tx_buff[] = {0x01, 0x62, 0x80};
-//static const uint8_t ch3_i2c_tx_buff[] = {0x01, 0x72, 0x80};
+static const uint8_t MULPLXR_CH_MASK[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
 
 static const uint32_t TIMEOUT_I2C  = 50U;
 static const uint32_t TIMEOUT_UART = 50U;
@@ -73,7 +76,87 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+HAL_StatusTypeDef i2c_adc_module(uint8_t adc_channel , const uint8_t i2c_tx_buff[] , uint8_t tx_arr_size  ,  uint8_t * i2c_rx_buff , uint8_t rx_arr_size)
+  {
 
+
+	  HAL_StatusTypeDef status;
+
+	  status = HAL_I2C_Master_Transmit(&hi2c1, ADC_ADDR << 1 , i2c_tx_buff, tx_arr_size , TIMEOUT_I2C);
+
+	  if(status != HAL_OK)
+	  {
+		  return status;
+	  }
+
+	  HAL_Delay(10);
+
+	  // To read from the sensor
+	  status = HAL_I2C_Master_Transmit(&hi2c1, ADC_ADDR << 1, &CONV_REG_ADDR , 1, TIMEOUT_I2C);
+
+	  if(status != HAL_OK)
+	  	  {
+	  		  return status;
+	  	  }
+
+	  HAL_Delay(10);
+
+	  status = HAL_I2C_Master_Receive(&hi2c1, ADC_ADDR << 1 , i2c_rx_buff , rx_arr_size, TIMEOUT_I2C);
+
+	  if(status != HAL_OK)
+	  	  {
+	  		  return status;
+	  	  }
+
+
+//  	  int16_t adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
+//
+//  	  // to cancel the noise effect on the print:
+//  	  if(adc_raw < 0)
+//  	  {
+//  		  adc_raw = 0;
+//  	  }
+//  	  float voltage = adc_raw * 4.096 / 32768.0f;
+//	  	  char uart_tx_i2c[80];
+//  	  sprintf(uart_tx_i2c , "\n\rADC%d: 0x%04x , voltage: %.4f v" ,adc_channel, adc_raw, voltage);
+//  	  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
+
+	  return HAL_OK;
+
+  }
+
+
+HAL_StatusTypeDef i2c_mux_module(uint8_t mulplxr_channel , const uint8_t i2c_tx_buff[] ,
+								uint8_t tx_arr_size , uint8_t rx_arr_size,
+								uint8_t * i2c_rx_buff , uint8_t adc_channel
+								){
+
+
+		i2c_rx_buff[0] = 0;
+		i2c_rx_buff[1] = 0;
+
+
+		HAL_StatusTypeDef status;
+
+		status = HAL_I2C_Master_Transmit(&hi2c1, MULPLXR_ADDR << 1 , &mulplxr_channel , 1 , TIMEOUT_I2C);
+
+		if(status != HAL_OK)
+		{
+			HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerrMULPLXR_ADDR", strlen("\r\nerrMULPLXR_ADDR"), TIMEOUT_UART);
+			return status;
+		}
+		HAL_Delay(10);
+
+		status = i2c_adc_module(adc_channel , i2c_tx_buff , tx_arr_size ,  i2c_rx_buff , rx_arr_size);
+		if(status != HAL_OK)
+		{
+			return status;
+		}
+
+
+
+	return HAL_OK;
+}
 /* USER CODE END 0 */
 
 /**
@@ -132,53 +215,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-HAL_StatusTypeDef i2c_adc_module(uint8_t adc_channel ,uint8_t TARGET_ADDR, const uint8_t i2c_tx_buff[] , uint8_t tx_arr_size , uint8_t i2c_rx_reg ,  uint8_t * i2c_rx_buff , uint8_t rx_arr_size)
-  {
-	  char uart_tx_i2c[80];
 
-	  HAL_StatusTypeDef status;
-
-	  status = HAL_I2C_Master_Transmit(&hi2c1, TARGET_ADDR << 1 , i2c_tx_buff, tx_arr_size , TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  {
-		  return status;
-	  }
-
-	  HAL_Delay(10);
-
-	  // To read from the sensor
-	  status = HAL_I2C_Master_Transmit(&hi2c1, TARGET_ADDR << 1, &i2c_rx_reg , 1, TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  	  {
-	  		  return status;
-	  	  }
-
-	  HAL_Delay(10);
-
-	  status = HAL_I2C_Master_Receive(&hi2c1, TARGET_ADDR << 1 , i2c_rx_buff , rx_arr_size, TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  	  {
-	  		  return status;
-	  	  }
-
-
-	  int16_t adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
-
-	  // to cancel the noise effect on the print:
-	  if(adc_raw < 0)
-	  {
-		  adc_raw = 0;
-	  }
-	  float voltage = adc_raw * 4.096 / 32768.0f;
-	  sprintf(uart_tx_i2c , "\n\rADC%d: 0x%04x , voltage: %.4f v" ,adc_channel, adc_raw, voltage);
-	  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
-
-	  return HAL_OK;
-
-  }
 
   while (1)
   {
@@ -187,16 +224,37 @@ HAL_StatusTypeDef i2c_adc_module(uint8_t adc_channel ,uint8_t TARGET_ADDR, const
 
 	  HAL_StatusTypeDef status;
 
-	  for(uint8_t ch=0; ch<4; ch++)
+
+	  for(uint8_t mux_ch = 0; mux_ch < 8 ; mux_ch ++)
 	  {
-		  status = i2c_adc_module(ch ,TARGET_ADDR, CH_I2C_TX_BUFF[ch] , 3 , CONV_REG_ADDR ,  i2c_rx_buff , 2);
-		  snprintf(uart_tx_i2c ,  sizeof(uart_tx_i2c) , " , Hal status: %d" , status);
-		  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 50);
-		  HAL_Delay(100);
+		  for(uint8_t adc_ch = 0; adc_ch < 4 ; adc_ch++)
+		  {
+			  status = i2c_mux_module(MULPLXR_CH_MASK[mux_ch] , CH_I2C_TX_BUFF[adc_ch] ,
+					  	  	  	  	  ADC_CONFIG_SIZE , ADC_RX_SIZE, i2c_rx_buff , adc_ch);
+
+			  if(status != HAL_OK)
+			  {
+				  snprintf(uart_tx_i2c ,  sizeof(uart_tx_i2c) , " \r\nMux[%d], ADC[%d] not working, Hal status: %d" , mux_ch , adc_ch, status);
+				  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 50);
+				  continue;
+			  }
+
+			  int16_t adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
+			  // to cancel the noise effect on the print:
+			  if(adc_raw < 0)
+			  {
+				  adc_raw = 0;
+			  }
+			  float voltage = adc_raw * 4.096 / 32768.0f;
+
+			  sprintf(uart_tx_i2c , "\n\rMux[%d] , ADC%d: 0x%04x , voltage: %.4f v" , mux_ch , adc_ch, adc_raw, voltage);
+			  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
+
+		  }
+
+
+			  HAL_Delay(10);
 	  }
-
-
-
 
 
     /* USER CODE END WHILE */
