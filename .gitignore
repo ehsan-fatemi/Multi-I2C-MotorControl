@@ -1,0 +1,104 @@
+# =========================
+
+# STM32CubeIDE / Eclipse
+
+# =========================
+
+# Eclipse project metadata (keep project structure if you want)
+
+.project
+.cproject
+
+# metadate folder
+.metadata/
+
+# drivers
+micro/insole/Drivers
+
+# Eclipse settings
+
+.settings/
+
+# CubeIDE user preferences
+
+*.prefs
+
+# =========================
+
+# Build folders
+
+# =========================
+
+Debug/
+Release/
+build/
+
+# Object / binary files
+
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+
+# Linker temporary files
+
+*.ld.tmp
+
+# =========================
+
+# Debug / launch configs
+
+# =========================
+
+*.launch
+
+# =========================
+
+# CubeMX temporary files
+
+# =========================
+
+*.log
+*.tmp
+
+# =========================
+
+# OS generated files
+
+# =========================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+
+# Python (for your RPi tools)
+
+# =========================
+
+**pycache**/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+
+# Backup / temporary
+
+# =========================
+
+*~
+*.bak
+*.swp
+
+# =========================
+
+# Optional: ignore CANopenNode docs build
+
+# =========================
+
+*.doxygen
