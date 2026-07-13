@@ -26,6 +26,10 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
+#include "ads1115.h"
+#include "tca9548a.h"
+#include "motoron.h"
+
 //#include <strings.h>
 
 /* USER CODE END Includes */
@@ -38,8 +42,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define ADC_CONFIG_SIZE 3U
-#define ADC_RX_SIZE     2U
 
 /* USER CODE END PD */
 
@@ -51,24 +53,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static const uint8_t CONV_REG_ADDR = 0x00;
 
-static const uint8_t MULPLXR_ADDR = 0x70;
-static const uint8_t ADC_ADDR     = 0x48;
-
-static const uint8_t CH_I2C_TX_BUFF[][3] = {
-		{0x01, 0xC2, 0x80},
-		{0x01, 0xD2, 0x80},
-		{0x01, 0xE2, 0x80},
-		{0x01, 0xF2, 0x80}
-};
-
-static const uint8_t MULPLXR_CH_MASK[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
 
 static const uint32_t TIMEOUT_I2C  = 50U;
 static const uint32_t TIMEOUT_UART = 50U;
 
-static const uint8_t MOTORUN_ADDR = 0x10;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -79,229 +69,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-HAL_StatusTypeDef i2c_adc_module(uint8_t adc_channel , const uint8_t i2c_tx_buff[] , uint8_t tx_arr_size  ,  uint8_t * i2c_rx_buff , uint8_t rx_arr_size)
-  {
 
-
-	  HAL_StatusTypeDef status;
-
-	  status = HAL_I2C_Master_Transmit(&hi2c1, ADC_ADDR << 1 , i2c_tx_buff, tx_arr_size , TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  {
-		  return status;
-	  }
-
-	  HAL_Delay(10);
-
-	  // To read from the sensor
-	  status = HAL_I2C_Master_Transmit(&hi2c1, ADC_ADDR << 1, &CONV_REG_ADDR , 1, TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  	  {
-	  		  return status;
-	  	  }
-
-	  HAL_Delay(10);
-
-	  status = HAL_I2C_Master_Receive(&hi2c1, ADC_ADDR << 1 , i2c_rx_buff , rx_arr_size, TIMEOUT_I2C);
-
-	  if(status != HAL_OK)
-	  	  {
-	  		  return status;
-	  	  }
-
-
-//  	  int16_t adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
-//
-//  	  // to cancel the noise effect on the print:
-//  	  if(adc_raw < 0)
-//  	  {
-//  		  adc_raw = 0;
-//  	  }
-//  	  float voltage = adc_raw * 4.096 / 32768.0f;
-//	  	  char uart_tx_i2c[80];
-//  	  sprintf(uart_tx_i2c , "\n\rADC%d: 0x%04x , voltage: %.4f v" ,adc_channel, adc_raw, voltage);
-//  	  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
-
-	  return HAL_OK;
-
-  }
-
-
-HAL_StatusTypeDef i2c_mux_module(uint8_t mulplxr_channel , const uint8_t i2c_tx_buff[] ,
-								uint8_t tx_arr_size , uint8_t rx_arr_size,
-								uint8_t * i2c_rx_buff , uint8_t adc_channel
-								){
-
-
-//		i2c_rx_buff[0] = 0;
-//		i2c_rx_buff[1] = 0;
-
-
-		HAL_StatusTypeDef status;
-
-		status = HAL_I2C_Master_Transmit(&hi2c1, MULPLXR_ADDR << 1 , &mulplxr_channel , 1 , TIMEOUT_I2C);
-
-		if(status != HAL_OK)
-		{
-			HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerrMULPLXR_ADDR", strlen("\r\nerrMULPLXR_ADDR"), TIMEOUT_UART);
-			return status;
-		}
-		HAL_Delay(10);
-
-		status = i2c_adc_module(adc_channel , i2c_tx_buff , tx_arr_size ,  i2c_rx_buff , rx_arr_size);
-		if(status != HAL_OK)
-		{
-			return status;
-		}
-
-
-
-	return HAL_OK;
-}
-
-HAL_StatusTypeDef i2c_motoron_motor_set(uint8_t * i2c_rx_buff_pot)
-{
-	HAL_StatusTypeDef status;
-	char uart_tx[100];
-
-	uint8_t motoron_set_speed[4] ;//= {0xD1 , 0x01 , 0x00 , 0x40};
-
-	snprintf(uart_tx , sizeof(uart_tx) , "\r\nPotentiometer: 0x%02x 0x%02x" , i2c_rx_buff_pot[0] ,i2c_rx_buff_pot[1]);
-	HAL_UART_Transmit(&huart1, (uint8_t *) uart_tx, strlen(uart_tx), TIMEOUT_UART);
-
-//	uint8_t motor = 0x01;
-//	uint16_t speed = 0x672;
-//	motoron_set_speed[0] = 0xD1;
-//	motoron_set_speed[1] = motor & 0x7F;
-//	motoron_set_speed[2] = speed & 0x7F;
-//	motoron_set_speed[3] = (speed >> 7) & 0x7F;
-
-	int16_t adc_raw  = (int16_t)((i2c_rx_buff_pot[0] << 8 ) | (i2c_rx_buff_pot[1]));
-	if(adc_raw < 0){adc_raw = 0;}
-//	adc_raw = adc_raw  / 41;		// maps 0..32767 to 0..799
-	int16_t speed = (int16_t)(((int32_t)adc_raw * 1600) / 32767 - 800);
-	if (speed > 800)
-	    speed = 800;
-
-	if (speed < -800)
-	    speed = -800;
-	uint8_t motor = 0x01;
-	motoron_set_speed[0] = 0xD1;
-	motoron_set_speed[1] = motor & 0x7F;
-	motoron_set_speed[2] = speed & 0x7F;
-	motoron_set_speed[3] = (speed >> 7) & 0x7F;
-
-	snprintf(uart_tx , sizeof(uart_tx) , "\r\nmotoron_set_speed: 0x%04x 0x%04x 0x%04x 0x%04x speed:%d " , motoron_set_speed[0] ,motoron_set_speed[1] , motoron_set_speed[2] , motoron_set_speed[3] , speed);
-	HAL_UART_Transmit(&huart1, (uint8_t *) uart_tx, strlen(uart_tx), TIMEOUT_UART);
-
-
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , motoron_set_speed, 4 , TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		uint32_t err = HAL_I2C_GetError(&hi2c1);
-
-		snprintf(uart_tx, sizeof(uart_tx),
-		         "\r\nI2C failed. status=%d error=0x%08lX state=%d",
-		         status, err, hi2c1.State);
-
-		HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx, strlen(uart_tx), TIMEOUT_UART);
-
-//		snprintf(uart_tx , sizeof(uart_tx) , "\r\nerror motoron_set_speed!" );
-//		HAL_UART_Transmit(&huart1, (uint8_t *) uart_tx, strlen(uart_tx), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-//	HAL_UART_Transmit(&huart1, (uint8_t *) "\r\nmotor set", strlen("\r\nmotor set"), TIMEOUT_UART);
-	return status;
-}
-
-HAL_StatusTypeDef hal_i2c_motoron_initialization()
-{
-	HAL_StatusTypeDef status;
-	char uart_tx[100];
-	uint8_t motoron_clear_motor_fault = 0xA6;
-
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , &motoron_clear_motor_fault, 1, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror motoron_clear_motor_fault", strlen("\r\nerror motoron_clear_motor_fault"), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-	uint8_t motoron_clear_latched_status_flags[] = {0xA9 , 0x00 , 0x04};
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , motoron_clear_latched_status_flags, 3, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror motoron_clear_latched_status_flags", strlen("\r\nerror motoron_clear_latched_status_flags"), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-	return status;
-
-}
-
-HAL_StatusTypeDef i2c_motoron()
-{
-	char uart_tx[100];
-
-	static const uint8_t Reinitialize_Reg[] = {0x96 , 0x74};
-	static const uint8_t CRC_DISABLE[] = {0x8B , 0x04 , 0x7B , 0x43};
-	static const uint8_t MOTORN_VERSION 	= 0x87;
-	uint8_t MOTORUN_RX_BUFFER[4] = {0};
-
-	HAL_StatusTypeDef status;
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , Reinitialize_Reg, 2, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror CRC_DISABLE!", strlen("\r\nerror CRC_DISABLE!"), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , CRC_DISABLE, 4, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror CRC_DISABLE!", strlen("\r\nerror CRC_DISABLE!"), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-	status = HAL_I2C_Master_Transmit(&hi2c1, MOTORUN_ADDR << 1 , &MOTORN_VERSION, 1, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror MOTORN_VERSION!", strlen("\r\nerror MOTORN_VERSION!"), TIMEOUT_UART);
-		return status;
-	}
-	HAL_Delay(10);
-
-	status = HAL_I2C_Master_Receive(&hi2c1, MOTORUN_ADDR << 1 , MOTORUN_RX_BUFFER, 4, TIMEOUT_I2C);
-	if(status != HAL_OK)
-	{
-		HAL_UART_Transmit(&huart1, (uint8_t *)"\r\nerror MOTORUN_RX_BUFFER!", strlen("\r\nerror MOTORUN_RX_BUFFER!"), TIMEOUT_UART);
-		return status;
-	}
-
-	uint16_t motorun_id = (uint16_t )((MOTORUN_RX_BUFFER[1] << 8) | (MOTORUN_RX_BUFFER[0]));
-	uint16_t motorun_firmware = (uint16_t)((MOTORUN_RX_BUFFER[3] << 8 ) | (MOTORUN_RX_BUFFER[2]));
-
-//    snprintf(uart_tx, sizeof(uart_tx),
-//             "\r\nSTATUS: %d RX: %02X %02X %02X %02X Product ID: 0x%04X Firmware: 0x%04X",
-//             status, MOTORUN_RX_BUFFER[0], MOTORUN_RX_BUFFER[1], MOTORUN_RX_BUFFER[2], MOTORUN_RX_BUFFER[3], motorun_id, motorun_firmware);
-    snprintf(uart_tx, sizeof(uart_tx),
-             "\r\nInitialization , I2C Status: %d , Product ID: 0x%04X Firmware: 0x%04X",
-             status, motorun_id, motorun_firmware);
-
-    HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx, strlen(uart_tx), TIMEOUT_UART);
-
-	return status;
-
-}
 /* USER CODE END 0 */
 
 /**
@@ -360,18 +128,14 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  i2c_motoron();
-  hal_i2c_motoron_initialization();
+  i2c_motoron(&hi2c1 , &huart1);
+  hal_i2c_motoron_initialization(&hi2c1 , &huart1);
 
   float voltage = 0;
   int16_t adc_raw = 0;
   uint8_t i2c_rx_buff[2] = {0};
-  uint8_t i2c_rx_buff_pot[2] = {0};
 
-  i2c_rx_buff_pot[0] = i2c_rx_buff[0];
-  i2c_rx_buff_pot[1] = i2c_rx_buff[1];
-
-  static uint32_t last_speed = 32767;
+  PotResult pot_to_speed;
 
   while (1)
   {
@@ -383,38 +147,26 @@ int main(void)
 
 	  for(uint8_t mux_ch = 0; mux_ch < 8 ; mux_ch ++)
 	  {
-		  status = i2c_mux_module(MULPLXR_CH_MASK[0] , CH_I2C_TX_BUFF[0] ,
+		  status = i2c_mux_module(&hi2c1 , &huart1 , MULPLXR_CH_MASK[0] , CH_I2C_TX_BUFF[0] ,
 		  					  	  	  	  	  ADC_CONFIG_SIZE , ADC_RX_SIZE, i2c_rx_buff , 0);
-		  adc_raw = (int16_t )((i2c_rx_buff[0] << 8) | i2c_rx_buff[1]);
-		  			  // to cancel the noise effect on the print:
-		  if(adc_raw < 0)
-		  {
-			  adc_raw = 0;
-		  }
-		  voltage = adc_raw * 4.096 / 32768.0f;
 
-		  sprintf(uart_tx_i2c , "\n\rMux[%d] , ADC%d: 0x%04x , voltage: %.4f v" , mux_ch , 0  , adc_raw, voltage);
+		  if (status == HAL_OK)
+		  {
+			  pot_to_speed = potentiometer_to_speed(i2c_rx_buff);
+
+			  i2c_motoron_motor_set(&hi2c1 , &huart1 ,  i2c_rx_buff , pot_to_speed.speed);
+		  }
+
+
+
+		  sprintf(uart_tx_i2c , "\n\rMux[%d] , ADC%d: 0x%04x , voltage: %.4f v" , mux_ch , 0  , pot_to_speed.adc_raw, pot_to_speed.voltage_mv / 1000.0);
 		  HAL_UART_Transmit(&huart1, uart_tx_i2c, strlen(uart_tx_i2c), 100);
 
-		  // To store the potentiometer value
 
-			  i2c_rx_buff_pot[0] = i2c_rx_buff[0];
-			  i2c_rx_buff_pot[1] = i2c_rx_buff[1];
-
-//			  if(adc_raw != last_speed)				// Update only when the potentiometer changes
-//			  {
-				  i2c_motoron_motor_set(i2c_rx_buff_pot);
-				  last_speed = adc_raw;
-//			  }
-
-
-		  for(uint8_t adc_ch = 0; adc_ch < 4 ; adc_ch++)
+		  for(uint8_t adc_ch = 1; adc_ch < 4 ; adc_ch++)
 		  {
-			  if(adc_ch != 0)
-				  status = i2c_mux_module(MULPLXR_CH_MASK[mux_ch] , CH_I2C_TX_BUFF[adc_ch] ,
+				  status = i2c_mux_module(&hi2c1 , &huart1 , MULPLXR_CH_MASK[mux_ch] , CH_I2C_TX_BUFF[adc_ch] ,
 										  ADC_CONFIG_SIZE , ADC_RX_SIZE, i2c_rx_buff , adc_ch);
-	//				snprintf(uart_tx_i2c , sizeof(uart_tx_i2c) , "\r\nPotentiometer111: 0x%02x 0x%02x " , i2c_rx_buff[0] ,i2c_rx_buff[1]  );
-	//				HAL_UART_Transmit(&huart1, (uint8_t *) uart_tx_i2c, strlen(uart_tx_i2c), TIMEOUT_UART);
 
 
 				  if(status != HAL_OK)
