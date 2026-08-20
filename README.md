@@ -2,7 +2,7 @@
 
 An STM32F103-based embedded project demonstrating modular I²C communication with multiple peripherals. The application controls a Pololu **Motoron M3H550** motor driver using a single potentiometer connected through an **ADS1115 16-bit ADC**, with all I²C devices managed through a **TCA9548A I²C multiplexer**.
 
-This project serves as both a learning example and a reusable driver for STM32-based motor control applications.
+This project was developed to practice modular STM32 firmware design and integration of multiple I²C peripherals.
 
 ---
 
